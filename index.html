@@ -89,8 +89,10 @@ document.addEventListener("DOMContentLoaded", function() {
   }
 
   const shopInput = document.getElementById("shopNameInput");
-  shopInput.value = getShopName();
 
+if (shopInput) {
+  shopInput.value = getShopName();
+}
   // ===== PLACE ORDER =====
   window.placeOrder = async function() {
 
