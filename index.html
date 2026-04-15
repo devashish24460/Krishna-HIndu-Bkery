@@ -3,17 +3,17 @@
 <script>
 const supabaseClient = supabase.createClient(
   "https://rkzpukaktfnbhoaablnj.supabase.co",
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJrenB1a2FrdGZuYmhvYWFibG5qIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYyMDQxOTMsImV4cCI6MjA5MTc4MDE5M30.ZyixvUm-2qTv0YWgghINzg11-Q-Z35Yi-X2DeLVc6wwE"
 );
 
-// ===== SHOP NAME (keep local only) =====
+// ===== SHOP NAME (local only) =====
 function getShopName(){return localStorage.getItem("so_shop")||"";}
 function saveShopName(n){localStorage.setItem("so_shop",n);}
 
-// ===== PLACE ORDER (SEND TO DB) =====
+// ===== PLACE ORDER =====
 async function placeOrder() {
-  const qty = parseInt(document.getElementById("qtyInput").value) || 1;
-  const shopName = document.getElementById("modalShopName").value.trim();
+  const qty = parseInt(document.getElementById("qtyInput")?.value) || 1;
+  const shopName = document.getElementById("modalShopName")?.value.trim();
 
   if (!shopName) {
     showToast("Enter shop name");
@@ -39,7 +39,9 @@ async function placeOrder() {
   }
 
   saveShopName(shopName);
-  document.getElementById("shopNameInput").value = shopName;
+
+  const input = document.getElementById("shopNameInput");
+  if (input) input.value = shopName;
 
   closeModal();
   showToast("✓ Order placed");
@@ -48,12 +50,14 @@ async function placeOrder() {
 // ===== FETCH + RENDER ORDERS =====
 async function renderOrders() {
   const { data: orders, error } = await supabaseClient
-    .from("orders")
+    .from("Orders")
     .select("*")
     .order("created_at", { ascending: false });
 
   const container = document.getElementById("ordersContainer");
   const statsRow = document.getElementById("statsRow");
+
+  if (!container || !statsRow) return;
 
   if (error || !orders.length) {
     statsRow.style.display = "none";
@@ -95,10 +99,10 @@ async function renderOrders() {
   `).join("");
 }
 
-// ===== EXPORT EXCEL FROM DB =====
+// ===== EXPORT =====
 async function exportExcel() {
   const { data: orders } = await supabaseClient
-    .from("orders")
+    .from("Orders")
     .select("*");
 
   if (!orders || !orders.length) {
@@ -122,8 +126,12 @@ async function exportExcel() {
   XLSX.writeFile(wb, "orders.xlsx");
 }
 
-// ===== KEEP EXISTING UI INIT =====
-document.getElementById("shopNameInput").value = getShopName();
-buildFilters();
-renderProducts();
+// ===== SAFE INIT (FIXED) =====
+document.addEventListener("DOMContentLoaded", function() {
+  const input = document.getElementById("shopNameInput");
+  if (input) input.value = getShopName();
+
+  if (typeof buildFilters === "function") buildFilters();
+  if (typeof renderProducts === "function") renderProducts();
+});
 </script>
