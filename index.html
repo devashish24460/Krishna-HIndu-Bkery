@@ -30,7 +30,7 @@ async function placeOrder() {
     total_cost: qty * selectedProduct.cost
   };
 
-  const { error } = await supabaseClient.from("orders").insert([order]);
+  const { error } = await supabaseClient.from("Orders").insert([order]);
 
   if (error) {
     console.error(error);
