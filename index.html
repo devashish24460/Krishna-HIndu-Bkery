@@ -1,137 +1,146 @@
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js"></script>
+<!-- XLSX (REQUIRED) -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+<!-- Supabase -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
 <script>
-const supabaseClient = supabase.createClient(
-  "https://rkzpukaktfnbhoaablnj.supabase.co",
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJrenB1a2FrdGZuYmhvYWFibG5qIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYyMDQxOTMsImV4cCI6MjA5MTc4MDE5M30.ZyixvUm-2qTv0YWgghINzg11-Q-Z35Yi-X2DeLVc6wwE"
-);
+document.addEventListener("DOMContentLoaded", function() {
 
-// ===== SHOP NAME (local only) =====
-function getShopName(){return localStorage.getItem("so_shop")||"";}
-function saveShopName(n){localStorage.setItem("so_shop",n);}
+  // ✅ Supabase init (FIXED)
+  const { createClient } = supabase;
+  const supabaseClient = createClient(
+    "https://rkzpukaktfnbhoaablnj.supabase.co",
+    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." // your anon key
+  );
 
-// ===== PLACE ORDER =====
-async function placeOrder() {
-  const qty = parseInt(document.getElementById("qtyInput")?.value) || 1;
-  const shopName = document.getElementById("modalShopName")?.value.trim();
+  // ===== SHOP NAME =====
+  function getShopName(){return localStorage.getItem("so_shop")||"";}
+  function saveShopName(n){localStorage.setItem("so_shop",n);}
 
-  if (!shopName) {
-    showToast("Enter shop name");
-    return;
-  }
+  // ===== PLACE ORDER =====
+  window.placeOrder = async function() {
+    const qty = parseInt(document.getElementById("qtyInput")?.value) || 1;
+    const shopName = document.getElementById("modalShopName")?.value.trim();
 
-  const order = {
-    shop_name: shopName,
-    product_id: selectedProduct.id,
-    product_name: selectedProduct.name,
-    category: selectedProduct.category,
-    quantity: qty,
-    cost_per_unit: selectedProduct.cost,
-    total_cost: qty * selectedProduct.cost
+    if (!shopName) {
+      showToast("Enter shop name");
+      return;
+    }
+
+    const order = {
+      shop_name: shopName,
+      product_id: selectedProduct.id,
+      product_name: selectedProduct.name,
+      category: selectedProduct.category,
+      quantity: qty,
+      cost_per_unit: selectedProduct.cost,
+      total_cost: qty * selectedProduct.cost
+    };
+
+    const { error } = await supabaseClient.from("Orders").insert([order]);
+
+    if (error) {
+      console.error(error);
+      showToast("Error placing order");
+      return;
+    }
+
+    saveShopName(shopName);
+
+    const input = document.getElementById("shopNameInput");
+    if (input) input.value = shopName;
+
+    closeModal();
+    showToast("✓ Order placed");
   };
 
-  const { error } = await supabaseClient.from("Orders").insert([order]);
+  // ===== FETCH + RENDER ORDERS =====
+  window.renderOrders = async function() {
+    const { data: orders, error } = await supabaseClient
+      .from("Orders")
+      .select("*")
+      .order("created_at", { ascending: false });
 
-  if (error) {
-    console.error(error);
-    showToast("Error placing order");
-    return;
-  }
+    const container = document.getElementById("ordersContainer");
+    const statsRow = document.getElementById("statsRow");
 
-  saveShopName(shopName);
+    if (!container || !statsRow) return;
 
-  const input = document.getElementById("shopNameInput");
-  if (input) input.value = shopName;
+    if (error || !orders?.length) {
+      statsRow.style.display = "none";
+      container.innerHTML = `
+        <div class="empty">
+          <div class="empty-icon">📋</div>
+          <div class="empty-text">No orders yet</div>
+        </div>`;
+      return;
+    }
 
-  closeModal();
-  showToast("✓ Order placed");
-}
+    const totalItems = orders.reduce((s,o)=>s+(o.quantity||0),0);
+    const totalValue = orders.reduce((s,o)=>s+(o.total_cost||0),0);
 
-// ===== FETCH + RENDER ORDERS =====
-async function renderOrders() {
-  const { data: orders, error } = await supabaseClient
-    .from("Orders")
-    .select("*")
-    .order("created_at", { ascending: false });
-
-  const container = document.getElementById("ordersContainer");
-  const statsRow = document.getElementById("statsRow");
-
-  if (!container || !statsRow) return;
-
-  if (error || !orders.length) {
-    statsRow.style.display = "none";
-    container.innerHTML = `<div class="empty">
-      <div class="empty-icon">📋</div>
-      <div class="empty-text">No orders yet</div>
-    </div>`;
-    return;
-  }
-
-  const totalItems = orders.reduce((s,o)=>s+(o.quantity||0),0);
-  const totalValue = orders.reduce((s,o)=>s+(o.total_cost||0),0);
-
-  statsRow.style.display = "grid";
-  statsRow.innerHTML = `
-    <div class="stat-card">
-      <div class="stat-label">Total Orders</div>
-      <div class="stat-value">${orders.length}</div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-label">Order Value</div>
-      <div class="stat-value">₹${totalValue.toFixed(2)}</div>
-    </div>
-  `;
-
-  container.innerHTML = orders.map(o => `
-    <div class="order-card">
-      <div class="order-top">
-        <span class="order-id">${o.id}</span>
-        <span class="order-date">${new Date(o.created_at).toLocaleString()}</span>
+    statsRow.style.display = "grid";
+    statsRow.innerHTML = `
+      <div class="stat-card">
+        <div class="stat-label">Total Orders</div>
+        <div class="stat-value">${orders.length}</div>
       </div>
-      <div class="order-product">${o.product_name}</div>
-      <div class="order-meta">
-        <span>Qty: <strong>${o.quantity}</strong></span>
-        <span>₹${(o.total_cost||0).toFixed(2)}</span>
+      <div class="stat-card">
+        <div class="stat-label">Order Value</div>
+        <div class="stat-value">₹${totalValue.toFixed(2)}</div>
       </div>
-      <div class="order-shop">🏪 ${o.shop_name}</div>
-    </div>
-  `).join("");
-}
+    `;
 
-// ===== EXPORT =====
-async function exportExcel() {
-  const { data: orders } = await supabaseClient
-    .from("Orders")
-    .select("*");
+    container.innerHTML = orders.map(o => `
+      <div class="order-card">
+        <div class="order-top">
+          <span class="order-id">${o.id}</span>
+          <span class="order-date">${new Date(o.created_at).toLocaleString()}</span>
+        </div>
+        <div class="order-product">${o.product_name}</div>
+        <div class="order-meta">
+          <span>Qty: <strong>${o.quantity}</strong></span>
+          <span>₹${(o.total_cost||0).toFixed(2)}</span>
+        </div>
+        <div class="order-shop">🏪 ${o.shop_name}</div>
+      </div>
+    `).join("");
+  };
 
-  if (!orders || !orders.length) {
-    showToast("No orders");
-    return;
-  }
+  // ===== EXPORT =====
+  window.exportExcel = async function() {
+    const { data: orders } = await supabaseClient
+      .from("Orders")
+      .select("*");
 
-  const rows = orders.map((o,i)=>({
-    "Sr.No": i+1,
-    "Shop Name": o.shop_name,
-    "Product": o.product_name,
-    "Quantity": o.quantity,
-    "Total Cost": o.total_cost,
-    "Date": o.created_at
-  }));
+    if (!orders?.length) {
+      showToast("No orders");
+      return;
+    }
 
-  const ws = XLSX.utils.json_to_sheet(rows);
-  const wb = XLSX.utils.book_new();
+    const rows = orders.map((o,i)=>({
+      "Sr.No": i+1,
+      "Shop Name": o.shop_name,
+      "Product": o.product_name,
+      "Quantity": o.quantity,
+      "Total Cost": o.total_cost,
+      "Date": o.created_at
+    }));
 
-  XLSX.utils.book_append_sheet(wb, ws, "Orders");
-  XLSX.writeFile(wb, "orders.xlsx");
-}
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
 
-// ===== SAFE INIT (FIXED) =====
-document.addEventListener("DOMContentLoaded", function() {
+    XLSX.utils.book_append_sheet(wb, ws, "Orders");
+    XLSX.writeFile(wb, "orders.xlsx");
+  };
+
+  // ===== INIT =====
   const input = document.getElementById("shopNameInput");
   if (input) input.value = getShopName();
 
   if (typeof buildFilters === "function") buildFilters();
   if (typeof renderProducts === "function") renderProducts();
+
 });
 </script>
