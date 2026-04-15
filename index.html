@@ -4,7 +4,65 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Krishna Hindu Bakery</title>
-<!-- XLSX (REQUIRED) -->
+
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 20px;
+      background: #f5f5f5;
+    }
+
+    h1 {
+      text-align: center;
+    }
+
+    .container {
+      max-width: 500px;
+      margin: auto;
+      background: white;
+      padding: 20px;
+      border-radius: 10px;
+    }
+
+    input, button {
+      width: 100%;
+      padding: 10px;
+      margin-top: 10px;
+      font-size: 16px;
+    }
+
+    button {
+      background: black;
+      color: white;
+      border: none;
+      cursor: pointer;
+    }
+
+    .orders {
+      margin-top: 20px;
+    }
+  </style>
+</head>
+
+<body>
+
+<div class="container">
+  <h1>Krishna Hindu Bakery</h1>
+
+  <input id="shopNameInput" placeholder="Enter Shop Name">
+
+  <input id="productInput" placeholder="Product Name">
+  <input id="qtyInput" type="number" placeholder="Quantity">
+
+  <button onclick="placeOrder()">Place Order</button>
+  <button onclick="renderOrders()">View Orders</button>
+  <button onclick="exportExcel()">Download Excel</button>
+
+  <div id="ordersContainer" class="orders"></div>
+</div>
+
+<!-- XLSX -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 
 <!-- Supabase -->
@@ -13,140 +71,114 @@
 <script>
 document.addEventListener("DOMContentLoaded", function() {
 
-  // ✅ Supabase init (FIXED)
-  const { createClient } = supabase;
-  const supabaseClient = createClient(
+  // ===== INIT SUPABASE =====
+  if (!window.supabase) {
+    alert("Supabase failed to load");
+    return;
+  }
+
+  const supabaseClient = supabase.createClient(
     "https://rkzpukaktfnbhoaablnj.supabase.co",
-    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." // your anon key
+    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJrenB1a2FrdGZuYmhvYWFibG5qIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYyMDQxOTMsImV4cCI6MjA5MTc4MDE5M30.ZyixvUm-2qTv0YWgghINzg11-Q-Z35Yi-X2DeLVc6ww"
   );
 
+  console.log("App Loaded");
+
   // ===== SHOP NAME =====
-  function getShopName(){return localStorage.getItem("so_shop")||"";}
-  function saveShopName(n){localStorage.setItem("so_shop",n);}
+  function getShopName(){
+    return localStorage.getItem("shop") || "";
+  }
+
+  function saveShopName(name){
+    localStorage.setItem("shop", name);
+  }
+
+  const shopInput = document.getElementById("shopNameInput");
+  shopInput.value = getShopName();
 
   // ===== PLACE ORDER =====
   window.placeOrder = async function() {
-    const qty = parseInt(document.getElementById("qtyInput")?.value) || 1;
-    const shopName = document.getElementById("modalShopName")?.value.trim();
 
-    if (!shopName) {
-      showToast("Enter shop name");
+    const shop = shopInput.value.trim();
+    const product = document.getElementById("productInput").value.trim();
+    const qty = parseInt(document.getElementById("qtyInput").value);
+
+    if (!shop || !product || !qty) {
+      alert("Fill all fields");
       return;
     }
 
     const order = {
-      shop_name: shopName,
-      product_id: selectedProduct.id,
-      product_name: selectedProduct.name,
-      category: selectedProduct.category,
+      shop_name: shop,
+      product_name: product,
       quantity: qty,
-      cost_per_unit: selectedProduct.cost,
-      total_cost: qty * selectedProduct.cost
+      total_cost: qty * 10 // dummy cost
     };
 
-    const { error } = await supabaseClient.from("Orders").insert([order]);
+    const { error } = await supabaseClient
+      .from("Orders")
+      .insert([order]);
 
     if (error) {
       console.error(error);
-      showToast("Error placing order");
+      alert("Error saving order");
       return;
     }
 
-    saveShopName(shopName);
+    saveShopName(shop);
 
-    const input = document.getElementById("shopNameInput");
-    if (input) input.value = shopName;
-
-    closeModal();
-    showToast("✓ Order placed");
+    alert("Order placed");
   };
 
-  // ===== FETCH + RENDER ORDERS =====
+  // ===== VIEW ORDERS =====
   window.renderOrders = async function() {
-    const { data: orders, error } = await supabaseClient
+
+    const { data, error } = await supabaseClient
       .from("Orders")
       .select("*")
       .order("created_at", { ascending: false });
 
     const container = document.getElementById("ordersContainer");
-    const statsRow = document.getElementById("statsRow");
 
-    if (!container || !statsRow) return;
-
-    if (error || !orders?.length) {
-      statsRow.style.display = "none";
-      container.innerHTML = `
-        <div class="empty">
-          <div class="empty-icon">📋</div>
-          <div class="empty-text">No orders yet</div>
-        </div>`;
+    if (error) {
+      console.error(error);
+      container.innerHTML = "Error loading orders";
       return;
     }
 
-    const totalItems = orders.reduce((s,o)=>s+(o.quantity||0),0);
-    const totalValue = orders.reduce((s,o)=>s+(o.total_cost||0),0);
+    if (!data.length) {
+      container.innerHTML = "No orders yet";
+      return;
+    }
 
-    statsRow.style.display = "grid";
-    statsRow.innerHTML = `
-      <div class="stat-card">
-        <div class="stat-label">Total Orders</div>
-        <div class="stat-value">${orders.length}</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">Order Value</div>
-        <div class="stat-value">₹${totalValue.toFixed(2)}</div>
-      </div>
-    `;
-
-    container.innerHTML = orders.map(o => `
-      <div class="order-card">
-        <div class="order-top">
-          <span class="order-id">${o.id}</span>
-          <span class="order-date">${new Date(o.created_at).toLocaleString()}</span>
-        </div>
-        <div class="order-product">${o.product_name}</div>
-        <div class="order-meta">
-          <span>Qty: <strong>${o.quantity}</strong></span>
-          <span>₹${(o.total_cost||0).toFixed(2)}</span>
-        </div>
-        <div class="order-shop">🏪 ${o.shop_name}</div>
+    container.innerHTML = data.map(o => `
+      <div>
+        ${o.product_name} - ${o.quantity} - ₹${o.total_cost}
       </div>
     `).join("");
   };
 
-  // ===== EXPORT =====
+  // ===== EXPORT EXCEL =====
   window.exportExcel = async function() {
-    const { data: orders } = await supabaseClient
+
+    const { data } = await supabaseClient
       .from("Orders")
       .select("*");
 
-    if (!orders?.length) {
-      showToast("No orders");
+    if (!data.length) {
+      alert("No data");
       return;
     }
 
-    const rows = orders.map((o,i)=>({
-      "Sr.No": i+1,
-      "Shop Name": o.shop_name,
-      "Product": o.product_name,
-      "Quantity": o.quantity,
-      "Total Cost": o.total_cost,
-      "Date": o.created_at
-    }));
-
-    const ws = XLSX.utils.json_to_sheet(rows);
+    const ws = XLSX.utils.json_to_sheet(data);
     const wb = XLSX.utils.book_new();
 
     XLSX.utils.book_append_sheet(wb, ws, "Orders");
     XLSX.writeFile(wb, "orders.xlsx");
   };
 
-  // ===== INIT =====
-  const input = document.getElementById("shopNameInput");
-  if (input) input.value = getShopName();
-
-  if (typeof buildFilters === "function") buildFilters();
-  if (typeof renderProducts === "function") renderProducts();
-
 });
 </script>
+
+</body>
+</html>
