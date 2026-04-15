@@ -1,0 +1,129 @@
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js"></script>
+
+<script>
+const supabaseClient = supabase.createClient(
+  "https://rkzpukaktfnbhoaablnj.supabase.co",
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+);
+
+// ===== SHOP NAME (keep local only) =====
+function getShopName(){return localStorage.getItem("so_shop")||"";}
+function saveShopName(n){localStorage.setItem("so_shop",n);}
+
+// ===== PLACE ORDER (SEND TO DB) =====
+async function placeOrder() {
+  const qty = parseInt(document.getElementById("qtyInput").value) || 1;
+  const shopName = document.getElementById("modalShopName").value.trim();
+
+  if (!shopName) {
+    showToast("Enter shop name");
+    return;
+  }
+
+  const order = {
+    shop_name: shopName,
+    product_id: selectedProduct.id,
+    product_name: selectedProduct.name,
+    category: selectedProduct.category,
+    quantity: qty,
+    cost_per_unit: selectedProduct.cost,
+    total_cost: qty * selectedProduct.cost
+  };
+
+  const { error } = await supabaseClient.from("orders").insert([order]);
+
+  if (error) {
+    console.error(error);
+    showToast("Error placing order");
+    return;
+  }
+
+  saveShopName(shopName);
+  document.getElementById("shopNameInput").value = shopName;
+
+  closeModal();
+  showToast("✓ Order placed");
+}
+
+// ===== FETCH + RENDER ORDERS =====
+async function renderOrders() {
+  const { data: orders, error } = await supabaseClient
+    .from("orders")
+    .select("*")
+    .order("created_at", { ascending: false });
+
+  const container = document.getElementById("ordersContainer");
+  const statsRow = document.getElementById("statsRow");
+
+  if (error || !orders.length) {
+    statsRow.style.display = "none";
+    container.innerHTML = `<div class="empty">
+      <div class="empty-icon">📋</div>
+      <div class="empty-text">No orders yet</div>
+    </div>`;
+    return;
+  }
+
+  const totalItems = orders.reduce((s,o)=>s+(o.quantity||0),0);
+  const totalValue = orders.reduce((s,o)=>s+(o.total_cost||0),0);
+
+  statsRow.style.display = "grid";
+  statsRow.innerHTML = `
+    <div class="stat-card">
+      <div class="stat-label">Total Orders</div>
+      <div class="stat-value">${orders.length}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Order Value</div>
+      <div class="stat-value">₹${totalValue.toFixed(2)}</div>
+    </div>
+  `;
+
+  container.innerHTML = orders.map(o => `
+    <div class="order-card">
+      <div class="order-top">
+        <span class="order-id">${o.id}</span>
+        <span class="order-date">${new Date(o.created_at).toLocaleString()}</span>
+      </div>
+      <div class="order-product">${o.product_name}</div>
+      <div class="order-meta">
+        <span>Qty: <strong>${o.quantity}</strong></span>
+        <span>₹${(o.total_cost||0).toFixed(2)}</span>
+      </div>
+      <div class="order-shop">🏪 ${o.shop_name}</div>
+    </div>
+  `).join("");
+}
+
+// ===== EXPORT EXCEL FROM DB =====
+async function exportExcel() {
+  const { data: orders } = await supabaseClient
+    .from("orders")
+    .select("*");
+
+  if (!orders || !orders.length) {
+    showToast("No orders");
+    return;
+  }
+
+  const rows = orders.map((o,i)=>({
+    "Sr.No": i+1,
+    "Shop Name": o.shop_name,
+    "Product": o.product_name,
+    "Quantity": o.quantity,
+    "Total Cost": o.total_cost,
+    "Date": o.created_at
+  }));
+
+  const ws = XLSX.utils.json_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+
+  XLSX.utils.book_append_sheet(wb, ws, "Orders");
+  XLSX.writeFile(wb, "orders.xlsx");
+}
+
+// ===== KEEP EXISTING UI INIT =====
+document.getElementById("shopNameInput").value = getShopName();
+buildFilters();
+renderProducts();
+</script>
