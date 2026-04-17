@@ -558,7 +558,7 @@ async function submitOrder(){
       quantity:    qty,
       cost_per_unit: p.cost,
       total_cost:  parseFloat((p.cost*qty).toFixed(2)),
-      order_date:  dateStr
+      order_date: new Date().toISOString()
     };
   });
 
